@@ -1,0 +1,2 @@
+ansible_host: 192.168.164.102
+ansible_ssh_pass: raspberry

@@ -1,6 +1,6 @@
 ---
 # Apply this to test group only
-- hosts: test_group
+- hosts: test_group_2
   remote_user: pi
   become: yes
   tasks:
