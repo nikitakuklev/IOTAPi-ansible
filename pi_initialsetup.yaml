@@ -5,7 +5,7 @@
   become: yes
   tasks:
 #  - debug: msg="Starting pi initial setup"
-  - import_tasks: common_tasks/getserial.yaml
+  - import_tasks: common_tasks/get_serial.yaml
     static: yes  
   - set_fact:
      rpi_serial: "{{ rpi_serial_output.stdout }}"
@@ -19,12 +19,12 @@
     vars:
      desired_hostname = inventory_hostname
     when: ansible_hostname != inventory_hostname
-  - import_tasks: common_tasks/restartandawait.yaml
+  - import_tasks: common_tasks/restart_and_await.yaml
     static: yes
-#  - import_tasks: common_tasks/updateaptpackages.yaml
+#  - import_tasks: common_tasks/update_apt_packages.yaml
 #    static: yes
-#  - import_tasks: common_tasks/restartandawait.yaml
+#  - import_tasks: common_tasks/restart_and_await.yaml
 #    static: yes
   - debug: msg="Done updating apt, now prepping python"
-  - import_tasks: common_tasks/installpippackages.yaml
+  - import_tasks: common_tasks/install_pip_packages.yaml
     static: yes
