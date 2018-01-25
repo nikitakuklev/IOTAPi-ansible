@@ -13,6 +13,14 @@
   - debug: msg="Machine {{ inventory_hostname }} has actual hostname ({{ ansible_hostname }})"
   - debug: msg="Board serial is {{ rpi_serial }}"
   - debug: msg="Configuration file is {{ rpi_configfile }}"
+  # Here, we dynamically include the task such that hostname is a parameter
+  - include_tasks: common_tasks/set_hostname.yaml
+    static: yes
+    vars:
+     desired_hostname = inventory_hostname
+    when: ansible_hostname != inventory_hostname
+  - import_tasks: common_tasks/restartandawait.yaml
+    static: yes
 #  - import_tasks: common_tasks/updateaptpackages.yaml
 #    static: yes
 #  - import_tasks: common_tasks/restartandawait.yaml

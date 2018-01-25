@@ -1,0 +1,4 @@
+---
+- debug: msg="Changing hostname to {{ desired_hostname }}"
+- name: "Set RasPi hostname"
+  shell: sudo raspi-config nonint do_hostname {{ desired_hostname }}
