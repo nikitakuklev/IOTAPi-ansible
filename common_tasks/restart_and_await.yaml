@@ -11,3 +11,7 @@
    delay: 5
    sleep: 1
    timeout: 120
+   
+# Just in case
+- pause:
+   seconds: 2

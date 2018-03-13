@@ -1,0 +1,4 @@
+---
+- name: base | wifi off | if off  
+  command: ifconfig wlan0 down 
+  become: yes

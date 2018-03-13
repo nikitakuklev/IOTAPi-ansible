@@ -1,13 +1,17 @@
 ---
-- name: 'Update apt sources'
-  apt:
-   update_cache: yes
-- name: 'Do dist-upgrade'
-  apt:
-   upgrade: dist
-- name: 'Clean up cache'
+- name: base | apt upd | clean up cache
   apt:
    autoclean: yes
-- name: 'Remove unneeded packages'
+   
+- name: base | apt upd | update sources/cache
+  apt:
+   update_cache: yes
+   cache_valid_time: 360
+   
+- name: base | apt upd | dist-upgrade
+  apt:
+   upgrade: dist
+   
+- name: base | apt upd | remove unneeded
   apt:
    autoremove: yes

@@ -3,4 +3,4 @@ iotapi_test_01
 
 [test_group_2]
 iotapi_test2_01
-iotapi_test2_02
+#iotapi_test2_02

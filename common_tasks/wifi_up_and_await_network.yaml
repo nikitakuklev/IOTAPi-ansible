@@ -1,0 +1,16 @@
+# Old command - iwconfig wlan0 txpower on
+# Might add iw dev wlan0 connect guest
+- name: base | wifi on | if up 
+  command: ifconfig wlan0 up 
+  become: yes
+
+# Wait for SSID to indicate the one we want
+- name: base | wifi on | await SSID
+  command: iwgetid
+  register: result
+  until: result.stdout.find("guest") != -1
+  retries: 20
+  delay: 2
+  changed_when: False
+  
+- debug: msg="WIFI OK"

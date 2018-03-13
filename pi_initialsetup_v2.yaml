@@ -1,0 +1,166 @@
+---
+# Apply this to test group only
+- hosts: test_group_2
+  remote_user: pi
+  become: yes
+  #any_errors_fatal: true # stop if anything is wrong
+  tasks:
+  - name: base | init | assert ansible version
+    assert:
+     that:
+      - "{{ ansible_version.string | version_compare('2.4', '>=') }}"
+     msg: Ansible 2.4 or above is required
+    
+  - name: base | init | add master key
+    authorized_key:
+     user: pi
+     state: present
+     exclusive: True
+     key: "{{ item }}"
+    with_file:
+     - ssh_keys/iotapi_master_1.pub
+     
+  - name: base | init | disable pass auth
+    lineinfile: 
+     path: /etc/ssh/sshd_config
+     regexp: "^PasswordAuthentication"
+     line: "PasswordAuthentication no"
+     state: present
+    notify: Restart ssh
+  
+  - name: base | init | disable root login
+    lineinfile:
+     path: /etc/ssh/sshd_config
+     regexp: "^PermitRootLogin"
+     line: "PermitRootLogin no"
+     state: present
+    notify: Restart ssh
+    
+  # - name: test
+    # command: /bin/true
+    # notify: Restart ssh
+    
+  - meta: flush_handlers
+  
+#######################################################
+# System configuration
+  
+    # Obtain board serial number
+  - import_tasks: common_tasks/get_serial.yaml
+    static: yes  
+  - set_fact:
+     rpi_serial: "{{ rpi_serial_output.stdout }}"
+     rpi_configfile: "{{ lookup('ini', 'configfile section=' + rpi_serial_output.stdout + ' file=boards.ini')|quote }}"
+  - debug: msg="Machine |{{ inventory_hostname }}| has actual hostname |{{ ansible_hostname }}|"
+  - debug: msg="Board serial is {{ rpi_serial }}"
+  - debug: msg="Configuration file is {{ rpi_configfile }}"
+  
+  - set_fact:
+     user_home: /home/pi
+     
+  # - name: base| init | user_home
+    # register: user_home
+    # action: command eval echo "~{{ userid }}"
+  
+    # Dynamically include the task such that hostname is a parameter
+  - name: base | init | include hostname playbook
+    include_tasks: common_tasks/set_hostname.yaml
+    static: no
+    vars:
+     desired_hostname: "{{ inventory_hostname }}"
+    when: ansible_hostname != inventory_hostname
+    
+  - name: base | init | set metrics
+    blockinfile: 
+     path: /etc/dhcpcd.conf
+     block: |
+      interface wlan0
+      metric 50
+      interface eth0
+      metric 301
+     state: present
+     
+    # Configure wifi
+  - name: base | init | wifi config
+    copy: 
+     src: ./config_files/wpa_supplicant.conf
+     dest: /etc/wpa_supplicant/wpa_supplicant.conf 
+     mode: 0600
+
+  - name: base | init | ws git clone
+    git:
+     repo: "https://github.com/magnific0/wondershaper.git"
+     dest: "{{ user_home }}/wondershaper"
+     
+  - name: base | init | ws compile
+    command: "make -C{{ user_home }}/wondershaper install"
+    
+    # Configure WS
+  - name: base | init | ws config copy
+    copy: 
+     src: ./config_files/wondershaper.conf
+     dest: /etc/conf.d/wondershaper.conf 
+     mode: 0644
+     
+  - name: base | init | ws service enable
+    command: "systemctl enable wondershaper.service"
+    
+ # raw commands
+ # tc qdisc add dev eth0 root tbf rate 1mbit burst 10kb latency 70ms peakrate 2mbit minburst 1540
+ # sudo tc qdisc add dev wlan0 handle ffff: ingress    
+ # tc filter add dev eth0 parent ffff: protocol ip prio 50 \
+ #  u32 match ip src 0.0.0.0/0 police rate 256kbit \
+ #  burst 10k drop flowid :1
+    
+    # Restart
+  - import_tasks: common_tasks/restart_and_await.yaml
+    static: yes
+     
+    # Bring wifi up
+  - import_tasks: common_tasks/wifi_up_and_await_network.yaml
+    static: yes
+    
+  - pause:
+     seconds: 10
+     
+##################################################################
+# PACKAGE MANAGEMENT
+  
+  # Remove stupid extras
+  - name: base | init | raspbian purge
+    apt:
+     pkg: "{{ item }}"
+     state: absent
+     purge: yes
+     autoremove: yes
+    with_items:
+       - wolfram-engine
+       - scratch
+       - minecraft-pi
+       - libreoffice*
+       - dillo
+       - scratch2
+       - oracle-java8-jdk
+       
+    # Update APT packages
+  - import_tasks: common_tasks/update_apt_packages.yaml
+    static: yes
+    
+    # Another restart
+  - import_tasks: common_tasks/restart_and_await.yaml
+    static: yes
+    
+    # # Do pip stuff now
+  # - debug: msg="Done updating apt, now prepping python"
+  # - import_tasks: common_tasks/install_pip_packages.yaml
+    # static: yes
+    
+  handlers:
+  - name: Restart ssh
+    service: 
+     name: ssh
+     state: restarted
+     
+  - name: Full restart
+    import_tasks: common_tasks/restart_and_await.yaml
+    static: yes
