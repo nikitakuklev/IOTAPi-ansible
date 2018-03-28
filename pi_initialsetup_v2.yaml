@@ -49,14 +49,12 @@
   - import_tasks: common_tasks/get_serial.yaml
     static: yes  
   - set_fact:
+     user_home: "/home/pi"
      rpi_serial: "{{ rpi_serial_output.stdout }}"
      rpi_configfile: "{{ lookup('ini', 'configfile section=' + rpi_serial_output.stdout + ' file=boards.ini')|quote }}"
   - debug: msg="Machine |{{ inventory_hostname }}| has actual hostname |{{ ansible_hostname }}|"
   - debug: msg="Board serial is {{ rpi_serial }}"
   - debug: msg="Configuration file is {{ rpi_configfile }}"
-  
-  - set_fact:
-     user_home: /home/pi
      
   # - name: base| init | user_home
     # register: user_home
@@ -69,6 +67,9 @@
     vars:
      desired_hostname: "{{ inventory_hostname }}"
     when: ansible_hostname != inventory_hostname
+    notify: Full restart
+    
+  - meta: flush_handlers
     
   - name: base | init | set metrics
     blockinfile: 
@@ -86,7 +87,18 @@
      src: ./config_files/wpa_supplicant.conf
      dest: /etc/wpa_supplicant/wpa_supplicant.conf 
      mode: 0600
-
+     
+  - name: base | init | wifi config restart
+    systemd:
+     name: dhcpcd.service
+     state: restarted
+     daemon_reload: yes
+     
+    # Bring wifi up
+  - import_tasks: common_tasks/wifi_up_and_await_network.yaml
+    static: yes
+    
+    # Clone and compile traffic shaper
   - name: base | init | ws git clone
     git:
      repo: "https://github.com/magnific0/wondershaper.git"
@@ -102,8 +114,16 @@
      dest: /etc/conf.d/wondershaper.conf 
      mode: 0644
      
-  - name: base | init | ws service enable
-    command: "systemctl enable wondershaper.service"
+  # - name: base | init | ws service enable
+    # command: "systemctl enable wondershaper.service"
+    
+    # Start WS
+  # - name: base | init | ws service enable
+    # systemd:
+     # name: wondershaper.service
+     # state: started
+     # enabled: yes
+     # daemon_reload: yes
     
  # raw commands
  # tc qdisc add dev eth0 root tbf rate 1mbit burst 10kb latency 70ms peakrate 2mbit minburst 1540
@@ -111,6 +131,42 @@
  # tc filter add dev eth0 parent ffff: protocol ip prio 50 \
  #  u32 match ip src 0.0.0.0/0 police rate 256kbit \
  #  burst 10k drop flowid :1
+ 
+    # Configure Apt to throttle too
+  - name: base | init | apt config copy
+    copy: 
+     src: ./config_files/75slowdlandretry
+     dest: /etc/apt/apt.conf.d/75slowdlandretry
+     mode: 0644
+    
+  # add https
+  - name: base | init| src cfg 1
+    replace:
+     path: "{{ item }}"
+     regexp: '^(.+?)http://(.+?)$'
+     replace: '\1https://\2'
+     backup: yes
+    with_items:
+#     - /etc/apt/sources.list
+     - /etc/apt/sources.list.d/raspi.list
+     
+   # put in https main repo
+  - name: base | init | src cfg 2
+    lineinfile: 
+     path: /etc/apt/sources.list
+     regexp: '#deb-src http://(.+?)$'
+     line: 'deb https://\1'
+     state: present
+     backrefs: yes
+     
+   # Remove mirror director
+  - name: base | init | src cfg 3
+    lineinfile: 
+     path: /etc/apt/sources.list
+     regexp: '^deb http://mirrordirector(.+?)$'
+     line: '#deb http://mirrordirector\1'
+     state: present
+     backrefs: yes
     
     # Restart
   - import_tasks: common_tasks/restart_and_await.yaml
@@ -121,18 +177,23 @@
     static: yes
     
   - pause:
-     seconds: 10
+     seconds: 2
      
 ##################################################################
 # PACKAGE MANAGEMENT
   
+  - name: base | init | update sources/cache
+    apt:
+     update_cache: yes
+     cache_valid_time: 360
+
   # Remove stupid extras
   - name: base | init | raspbian purge
     apt:
      pkg: "{{ item }}"
      state: absent
      purge: yes
-     autoremove: yes
+#     autoremove: yes
     with_items:
        - wolfram-engine
        - scratch
@@ -140,7 +201,9 @@
        - libreoffice*
        - dillo
        - scratch2
-       - oracle-java8-jdk
+    register: purge_result
+    retries: 2
+    until: purge_result | succeeded
        
     # Update APT packages
   - import_tasks: common_tasks/update_apt_packages.yaml

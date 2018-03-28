@@ -1,0 +1,17 @@
+Acquire::Retries "100";
+
+Acquire::http::Timeout "3";
+Acquire::https::Timeout "3";
+Acquire::ftp::Timeout "3";
+
+Acquire::http::Dl-Limit "100";
+Acquire::https::Dl-Limit "100";
+
+Acquire::https::Verify-Peer false;
+
+Acquire::http::Pipeline-Depth 0;
+Acquire::http::No-Cache true;
+Acquire::https::Pipeline-Depth 0;
+Acquire::https::No-Cache true;
+
+Acquire::BrokenProxy    true;
