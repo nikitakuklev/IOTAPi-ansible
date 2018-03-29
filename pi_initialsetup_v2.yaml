@@ -11,30 +11,9 @@
       - "{{ ansible_version.string | version_compare('2.4', '>=') }}"
      msg: Ansible 2.4 or above is required
     
-  - name: base | init | add master key
-    authorized_key:
-     user: pi
-     state: present
-     exclusive: True
-     key: "{{ item }}"
-    with_file:
-     - ssh_keys/iotapi_master_1.pub
-     
-  - name: base | init | disable pass auth
-    lineinfile: 
-     path: /etc/ssh/sshd_config
-     regexp: "^PasswordAuthentication"
-     line: "PasswordAuthentication no"
-     state: present
-    notify: Restart ssh
-  
-  - name: base | init | disable root login
-    lineinfile:
-     path: /etc/ssh/sshd_config
-     regexp: "^PermitRootLogin"
-     line: "PermitRootLogin no"
-     state: present
-    notify: Restart ssh
+  # Security first
+  - import_tasks: setup_tasks/configure_keys_and_disable_password.yaml
+    static: yes
     
   # - name: test
     # command: /bin/true
@@ -45,7 +24,7 @@
 #######################################################
 # System configuration
   
-    # Obtain board serial number
+  # Obtain board serial number and read in respective config section
   - import_tasks: common_tasks/get_serial.yaml
     static: yes  
   - set_fact:
@@ -60,7 +39,8 @@
     # register: user_home
     # action: command eval echo "~{{ userid }}"
   
-    # Dynamically include the task such that hostname is a parameter
+  # Change hostname 
+  # Dynamically include the task such that hostname is a parameter
   - name: base | init | include hostname playbook
     include_tasks: common_tasks/set_hostname.yaml
     static: no
@@ -68,120 +48,53 @@
      desired_hostname: "{{ inventory_hostname }}"
     when: ansible_hostname != inventory_hostname
     notify: Full restart
+  
+  # Copy boot configuration
+  - name: base | init | boot config copy
+    copy: 
+     src: ./config_files/config.txt
+     dest: /boot/config.txt
+     mode: 0755
+    notify: Full restart
     
   - meta: flush_handlers
     
-  - name: base | init | set metrics
-    blockinfile: 
-     path: /etc/dhcpcd.conf
-     block: |
-      interface wlan0
-      metric 50
-      interface eth0
-      metric 301
-     state: present
-     
-    # Configure wifi
-  - name: base | init | wifi config
-    copy: 
-     src: ./config_files/wpa_supplicant.conf
-     dest: /etc/wpa_supplicant/wpa_supplicant.conf 
-     mode: 0600
-     
-  - name: base | init | wifi config restart
-    systemd:
-     name: dhcpcd.service
-     state: restarted
-     daemon_reload: yes
-     
-    # Bring wifi up
-  - import_tasks: common_tasks/wifi_up_and_await_network.yaml
-    static: yes
-    
-    # Clone and compile traffic shaper
-  - name: base | init | ws git clone
-    git:
-     repo: "https://github.com/magnific0/wondershaper.git"
-     dest: "{{ user_home }}/wondershaper"
-     
-  - name: base | init | ws compile
-    command: "make -C{{ user_home }}/wondershaper install"
-    
-    # Configure WS
-  - name: base | init | ws config copy
-    copy: 
-     src: ./config_files/wondershaper.conf
-     dest: /etc/conf.d/wondershaper.conf 
-     mode: 0644
-     
-  # - name: base | init | ws service enable
-    # command: "systemctl enable wondershaper.service"
-    
-    # Start WS
-  # - name: base | init | ws service enable
-    # systemd:
-     # name: wondershaper.service
-     # state: started
-     # enabled: yes
-     # daemon_reload: yes
-    
- # raw commands
- # tc qdisc add dev eth0 root tbf rate 1mbit burst 10kb latency 70ms peakrate 2mbit minburst 1540
- # sudo tc qdisc add dev wlan0 handle ffff: ingress    
- # tc filter add dev eth0 parent ffff: protocol ip prio 50 \
- #  u32 match ip src 0.0.0.0/0 police rate 256kbit \
- #  burst 10k drop flowid :1
- 
-    # Configure Apt to throttle too
-  - name: base | init | apt config copy
-    copy: 
-     src: ./config_files/75slowdlandretry
-     dest: /etc/apt/apt.conf.d/75slowdlandretry
-     mode: 0644
-    
-  # add https
-  - name: base | init| src cfg 1
-    replace:
-     path: "{{ item }}"
-     regexp: '^(.+?)http://(.+?)$'
-     replace: '\1https://\2'
-     backup: yes
-    with_items:
-#     - /etc/apt/sources.list
-     - /etc/apt/sources.list.d/raspi.list
-     
-   # put in https main repo
-  - name: base | init | src cfg 2
-    lineinfile: 
-     path: /etc/apt/sources.list
-     regexp: '#deb-src http://(.+?)$'
-     line: 'deb https://\1'
-     state: present
-     backrefs: yes
-     
-   # Remove mirror director
-  - name: base | init | src cfg 3
-    lineinfile: 
-     path: /etc/apt/sources.list
-     regexp: '^deb http://mirrordirector(.+?)$'
-     line: '#deb http://mirrordirector\1'
-     state: present
-     backrefs: yes
-    
-    # Restart
-  - import_tasks: common_tasks/restart_and_await.yaml
+  # Configure wifi
+  - import_tasks: setup_tasks/set_wlan_config.yaml
     static: yes
      
-    # Bring wifi up
-  - import_tasks: common_tasks/wifi_up_and_await_network.yaml
+  # Configure apt
+  - import_tasks: setup_tasks/set_apt_repos_and_config.yaml
     static: yes
     
-  - pause:
-     seconds: 2
-     
+  - meta: flush_handlers
+  
+  # Restart
+  # - import_tasks: common_tasks/restart_and_await.yaml
+    # static: yes
+    
+  # Configure throttling
+  # - import_tasks: setup_tasks/set_wlan_traffic_shaping.yaml
+    # static: yes
+    
+  - name: test
+    command: /bin/true
+    notify: Full restart
+    
+  - meta: flush_handlers
+
 ##################################################################
 # PACKAGE MANAGEMENT
+
+  # Restart
+  - import_tasks: common_tasks/restart_and_await.yaml
+    static: yes
+    
+  # Bring wifi up
+  - import_tasks: common_tasks/wifi_up_and_await_network.yaml
+    static: yes
   
+  # Update repos
   - name: base | init | update sources/cache
     apt:
      update_cache: yes
@@ -193,7 +106,7 @@
      pkg: "{{ item }}"
      state: absent
      purge: yes
-#     autoremove: yes
+     autoremove: yes
     with_items:
        - wolfram-engine
        - scratch
@@ -202,28 +115,20 @@
        - dillo
        - scratch2
     register: purge_result
-    retries: 2
+    retries: 3
     until: purge_result | succeeded
        
-    # Update APT packages
+  # Update APT packages
   - import_tasks: common_tasks/update_apt_packages.yaml
     static: yes
     
-    # Another restart
+  # Another restart
   - import_tasks: common_tasks/restart_and_await.yaml
     static: yes
     
-    # # Do pip stuff now
-  # - debug: msg="Done updating apt, now prepping python"
-  # - import_tasks: common_tasks/install_pip_packages.yaml
-    # static: yes
+  # Do pip stuff now
+  - import_tasks: common_tasks/install_pip_packages.yaml
+    static: yes
     
   handlers:
-  - name: Restart ssh
-    service: 
-     name: ssh
-     state: restarted
-     
-  - name: Full restart
-    import_tasks: common_tasks/restart_and_await.yaml
-    static: yes
+    - import_tasks: handlers.yaml

@@ -1,9 +1,16 @@
+---
+- name: "Restart ssh"
+  service: 
+   name: ssh
+   state: restarted
+     
 # Run reboot command asynchronously and without polling, giving ansible time for cleanup
 - name: "Restart"
   become: yes
   shell: sleep 2 && /sbin/shutdown -r now "Rebooting"
   async: 1
   poll: 0
+  listen: "Full restart"
 
 # New module - wait for host to come back
 - name: "Await host coming back up"
@@ -11,7 +18,8 @@
    delay: 5
    sleep: 1
    timeout: 120
-   
-# Just in case
-- pause:
-   seconds: 1
+  listen: "Full restart"
+  
+- name: test2
+  debug: 
+   msg: "babababa"

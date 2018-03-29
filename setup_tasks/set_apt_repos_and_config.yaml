@@ -1,0 +1,40 @@
+---
+# Configure Apt to throttle
+- name: base | init | apt config copy
+  copy: 
+   src: ./config_files/75slowdlandretry
+   dest: /etc/apt/apt.conf.d/75slowdlandretry
+   mode: 0644
+  notify: Full restart
+  
+# add https
+- name: base | init| src cfg 1
+  replace:
+   path: "{{ item }}"
+   regexp: '^(.+?)http://(.+?)$'
+   replace: '\1https://\2'
+   backup: yes
+  with_items:
+#     - /etc/apt/sources.list
+   - /etc/apt/sources.list.d/raspi.list
+  notify: Full restart
+   
+# put in https main repo
+- name: base | init | src cfg 2
+  lineinfile: 
+   path: /etc/apt/sources.list
+   regexp: '#deb-src http://(.+?)$'
+   line: 'deb https://\1'
+   state: present
+   backrefs: yes
+  notify: Full restart
+   
+# Remove mirror director
+- name: base | init | src cfg 3
+  lineinfile: 
+   path: /etc/apt/sources.list
+   regexp: '^deb http://mirrordirector(.+?)$'
+   line: '#deb http://mirrordirector\1'
+   state: present
+   backrefs: yes
+  notify: Full restart

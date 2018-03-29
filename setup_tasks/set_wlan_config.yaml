@@ -1,0 +1,30 @@
+---
+# Configure wifi netwprk
+- name: base | setup | wifi config
+  copy: 
+   src: ./config_files/wpa_supplicant.conf
+   dest: /etc/wpa_supplicant/wpa_supplicant.conf 
+   mode: 0600
+  notify: Full restart
+  register: dhcpcd_restart
+  
+# Prioritize WLAN interface when available
+- name: base | setup | set metrics
+  blockinfile: 
+   path: /etc/dhcpcd.conf
+   block: |
+    interface wlan0
+    metric 50
+    interface eth0
+    metric 301
+   state: present
+  notify: Full restart
+  register: dhcpcd_restart2
+  
+# Restart to register changes
+- name: base | setup | wifi (dhcpcd) restart
+  systemd:
+   name: dhcpcd.service
+   state: restarted
+   daemon_reload: yes
+  when: dhcpcd_restart.changed or dhcpcd_restart2.changed

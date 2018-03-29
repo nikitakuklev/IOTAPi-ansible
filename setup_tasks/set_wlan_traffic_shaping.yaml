@@ -1,0 +1,31 @@
+---
+# Clone and compile traffic shaper
+- name: base | init | ws git clone
+  git:
+   repo: "https://github.com/magnific0/wondershaper.git"
+   dest: "{{ user_home }}/wondershaper"
+   
+- name: base | init | ws compile
+  command: "make -C{{ user_home }}/wondershaper install"
+  
+# Configure WS
+- name: base | init | ws config copy
+  copy: 
+   src: ./config_files/wondershaper.conf
+   dest: /etc/conf.d/wondershaper.conf 
+   mode: 0644
+    
+# Enable and start WS service
+- name: base | init | ws service enable
+  systemd:
+   name: wondershaper.service
+   state: started
+   enabled: yes
+   daemon_reload: yes
+   
+# raw commands
+# tc qdisc add dev eth0 root tbf rate 1mbit burst 10kb latency 70ms peakrate 2mbit minburst 1540
+# sudo tc qdisc add dev wlan0 handle ffff: ingress    
+# tc filter add dev eth0 parent ffff: protocol ip prio 50 \
+#  u32 match ip src 0.0.0.0/0 police rate 256kbit \
+#  burst 10k drop flowid :1
