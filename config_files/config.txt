@@ -2,8 +2,13 @@
 # http://rpf.io/configtxt
 # Some settings may impact device functionality. See link above for details
 
+dtdebug=on
+
 # Constant high clocks
 force_turbo=1
+
+# We are headless, so don't need gpu
+gpu_mem=32
 
 # Disable HDMI output on boot (alternatively, vcgencmd display_power 0 and tvservice -o)
 hdmi_blanking=2
@@ -11,19 +16,23 @@ hdmi_blanking=2
 # No splash
 disable_splash=1
 
-# Default is mmc, change to spu activity
+# Base overlay params first
+# Default is mmc
 dtparam=act_led_trigger=mmc1
 
-# Instead of constant power on ('input'), blink while system is alive
-dtparam=pwr_led_trigger=timer
+# Instead of constant power on ('input'), something more interesting
+dtparam=pwr_led_trigger=mmc0
 
-# Disable BT
+# Disable BT (hopefully doesn't mess with uart pins?)
 dtoverlay=pi3-disable-bt
+dtoverlay=
 
-# We are headless, so don't need gpu
-gpu_mem=32
+# No uart
+dtparam=uart0=off
+dtparam=uart1=off
+
+# Experimental
+dtparam=watchdog=on
 
 # No console
 enable_uart=0
-#dtparam=uart0=off
-#dtparam=uart1=off

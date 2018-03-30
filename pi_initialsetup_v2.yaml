@@ -57,6 +57,34 @@
      mode: 0755
     notify: Full restart
     
+  # Copy pin device tree config
+  - name: base | init | boot dtblob
+    copy: 
+     src: ./config_files/dt-blob.dts
+     dest: "{{ user_home }}/dt-blob.dts"
+     mode: 0755
+    notify: Full restart    
+    
+  # Compile and install dtblob
+  - name: base | init | compile dtblob
+    shell: dtc -W no-unit_address_vs_reg -I dts -O dtb -o /boot/dt-blob.bin "{{ user_home }}/dt-blob.dts"
+    
+  # Disable BT service
+  - name: base | init | bt service off
+    systemd:
+     name: hciuart.service
+     state: stopped
+     enabled: no
+     daemon_reload: yes
+     
+  # Disable serial console
+  - name: base | init | disable serial
+    shell: raspi-config nonint do_serial 1
+    
+  # Boot into CLI
+  - name: base | init | set cli boot
+    shell: raspi-config nonint do_boot_behaviour B1
+  
   - meta: flush_handlers
     
   # Configure wifi
@@ -87,8 +115,8 @@
 # PACKAGE MANAGEMENT
 
   # Restart
-  - import_tasks: common_tasks/restart_and_await.yaml
-    static: yes
+  # - import_tasks: common_tasks/restart_and_await.yaml
+    # static: yes
     
   # Bring wifi up
   - import_tasks: common_tasks/wifi_up_and_await_network.yaml
@@ -128,6 +156,10 @@
     
   # Do pip stuff now
   - import_tasks: common_tasks/install_pip_packages.yaml
+    static: yes
+    
+  # Bring wifi down
+  - import_tasks: common_tasks/wifi_down.yaml
     static: yes
     
   handlers:
